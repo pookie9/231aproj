@@ -16,6 +16,7 @@ from IPython import embed
 
 logging.basicConfig(level=logging.INFO)
 
+tf.app.flags.DEFINE_float("train_all", False, "Learning rate.")
 tf.app.flags.DEFINE_float("learning_rate", 0.0001, "Learning rate.")
 tf.app.flags.DEFINE_float("max_gradient_norm", 5.0, "Clip gradients to this norm.")
 tf.app.flags.DEFINE_float("dropout", 0.8, "Fraction of units randomly dropped on non-recurrent connections.")
@@ -140,10 +141,6 @@ def initialize_train_data():
                 if ".JPEG" not in file_name:
                     continue
                 img=misc.imresize(misc.imread(FLAGS.data_dir+"/train/"+img_class+"/images/"+file_name,mode="RGB"),(FLAGS.input_height,FLAGS.input_width))
-                img=blur(img)
-                print ("SHOWING IMAGE")
-
-                misc.imshow(img)
                 X.append(img)
                 if img_class not in name_to_class:
                     name_to_class[img_class]=len(name_to_class)
@@ -240,14 +237,22 @@ def main(_):
     with tf.Session() as sess:
         load_train_dir = get_normalized_train_dir(FLAGS.load_train_dir or FLAGS.train_dir)
         initialize_model(sess, model, load_train_dir)
-
         save_train_dir = get_normalized_train_dir(FLAGS.train_dir)
-        saver = tf.train.Saver()
+        var_list=tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
+        print "BEFORE",len(var_list)
+        if not FLAGS.train_all:
+            new_var_list=[]
+            for v in var_list:
+                if "OUTPUT_LAYER" not in v.name:
+                    new_var_list.append(v)
+            var_list=new_var_list
+        print "AFTER",len(var_list)
+        saver = tf.train.Saver(var_list=var_list)
 
-        #model.train(session=sess,
-        #         train_dataset=train_dataset,
-        #         val_dataset=val_dataset,
-        #         train_dir=save_train_dir)
+        model.train(session=sess,
+                 train_dataset=train_dataset,
+                 val_dataset=val_dataset,
+                    train_dir=save_train_dir)
 
 if __name__ == "__main__":
     tf.app.run()

@@ -46,7 +46,7 @@ class placesModel(object):
         self.width = self.flags.input_width
         self.channels = 3
         self.layer_params=self.flags.layer_params
-
+        self.train_all=flags.train_all
         # ==== set up placeholder tokens ========
 
         self.input_placeholder = tf.placeholder(tf.float32, shape=(None,self.height,self.width,self.channels), name='input_placeholder')
@@ -101,17 +101,24 @@ class placesModel(object):
                         #W=tf.get_variable('FC_W'+str(counter),shape=W_shape,initializer=layers.xavier_initializer())
                         #b=tf.get_variable('FC_b'+str(counter),shape=b_shape,initializer=tf.constant_initializer(0.0))
                         #cur_in=tf.matmul(flat,W)+b
+                        name='FC_'+str(counter)
+                        trainable=self.train_all
+                        if i==params[1]-1 and num_layer==len(self.layer_params) :
+                            name='OUTPUT_LAYER'
+                            trainable=True
                         cur_in = tf.layers.dense(inputs=flat,
-                            units=params[2],
-                            activation=None,
-                            kernel_initializer=layers.xavier_initializer(),
-                            kernel_regularizer=tf.contrib.layers.l2_regularizer(self.l2_reg, scope='FC_'+str(counter)),
-                            name='FC_'+str(counter))
+                                                 units=params[2],
+                                                 activation=None,
+                                                 kernel_initializer=layers.xavier_initializer(),
+                                                 kernel_regularizer=tf.contrib.layers.l2_regularizer(self.l2_reg, scope=name),
+                                                 name=name,
+                                                 trainable=trainable)
+                        
                         if i<params[1]-1 and num_layer!=len(self.layer_params) :
                             cur_in=tf.nn.relu(cur_in)
                             cur_in = tf.layers.dropout(cur_in,rate=self.dropout,training=self.is_train_placeholder,name='fc_do'+str(counter))
                     if params[0]=='batchnorm':
-                        cur_in=tf.layers.batch_normalization(cur_in,training=self.is_train_placeholder,name="bn"+str(counter))
+                        cur_in=tf.layers.batch_normalization(cur_in,training=self.is_train_placeholder,name="bn"+str(counter),trainable=self.train_all)
                     if params[0]=='relu':
                         cur_in=tf.nn.relu(cur_in)
                     if params[0]=='maxpool':
@@ -126,8 +133,8 @@ class placesModel(object):
                         W_shape=[params[2][0],params[2][1],prev_depth,params[4]]
                         b_shape=[params[4]]
                         prev_depth=params[4]
-                        W=tf.get_variable('W'+str(counter),shape=W_shape,initializer=layers.xavier_initializer())
-                        b = tf.get_variable('b'+str(counter)+'conv',shape=b_shape,initializer=tf.constant_initializer(0.0))         
+                        W=tf.get_variable('W'+str(counter),shape=W_shape,initializer=layers.xavier_initializer(),trainable=self.train_all)
+                        b = tf.get_variable('b'+str(counter)+'conv',shape=b_shape,initializer=tf.constant_initializer(0.0),trainable=self.train_all)         
                         z = tf.nn.conv2d(cur_in,W,params[3],'SAME') +b
                         if params[6]:
                             if prev_res!=None:
@@ -142,7 +149,7 @@ class placesModel(object):
                                     exit(1)
                                 z=prev_res+z
                         if params[5]:
-                            bn = tf.layers.batch_normalization(z,training=self.is_train_placeholder,name="bn"+str(counter))
+                            bn = tf.layers.batch_normalization(z,training=self.is_train_placeholder,name="bn"+str(counter),trainable=self.train_all)
                         h=tf.nn.relu(bn)
                         if params[6]:                            
                             prev_res=h
@@ -341,6 +348,7 @@ class placesModel(object):
         # print val_dataset[0].shape,val_dataset[1].shape
         # assert False
 
+        self.saver.save(session, train_dir+"/"+self.flags.run_name+".ckpt")
         for epoch in range(num_epochs):
             logging.info("Epoch %d out of %d", epoch + 1, self.flags.epochs)
             self.run_epoch(sess=session,
